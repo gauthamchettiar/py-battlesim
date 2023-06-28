@@ -1,4 +1,3 @@
-from collections import defaultdict
 from enum import Enum
 import random
 from attrs import define, field
@@ -22,6 +21,18 @@ class DefendStatus(Enum):
     DEFEND_SUCCESS = "DEFEND_SUCCESS"
     DEFEND_NOT_POSSIBLE = "DEFEND_NOT_POSSIBLE"
     ATTACK_EVADED = "ATTACK_EVADED"
+
+
+class EquipAt(Enum):
+    HAND_LEFT = "HAND_LEFT"
+    HAND_RIGHT = "HAND_RIGHT"
+    FEET_LEFT = "FEET_LEFT"
+    FEET_RIGHT = "FEET_RIGHT"
+    FINGER1 = "FINGER1"
+    FINGER2 = "FINGER2"
+    WAIST = "WAIST"
+    NECK = "NECK"
+    HEAD = "HEAD"
 
 
 @define
@@ -110,9 +121,10 @@ class CanEquip:
     def __init__(self, **kwargs) -> None:
         self.stat_to_equip = Stat(**kwargs.get("stat_to_equip", {}))
         self.stat_on_equip = Stat(**kwargs.get("stat_on_equip", {}))
+        self.equip_at: list[EquipAt] = kwargs.get("equip_at", [])
 
     def can_equip(self, player: "Character", opponent: "Character | None") -> bool:
-        return player.stat >= self.stat_to_equip
+        return player.stat >= self.stat_to_equip and len(self.equip_at) > 0
 
     def can_unequip(self, player: "Character", opponent: "Character | None") -> bool:
         return True
@@ -185,7 +197,10 @@ class Character:
     def __init__(self, **kwargs) -> None:
         self.flavor = FlavorStat(**kwargs.get("flavor", {}))
         self.stat = Stat(**kwargs.get("stat", {}))
+
         self.equipped = ItemGroup(group={})
+        self.equip_slots: dict[EquipAt, Item | None] = {k: None for k in EquipAt}
+
         self.opponent: Character | None = None
 
     def initiate_battle(self, opponent: "Character"):
@@ -296,6 +311,8 @@ class Character:
             if (equipped_item := self.equipped.add(item)) != None:
                 if isinstance(item, Item) and isinstance(item, CanEquip):
                     item.on_equip(player=self, opponent=self.opponent)
+                    if (_can_equip_at := self.can_equip_at(item)) is not None:
+                        self.equip_slots[_can_equip_at] = item
                     return equipped_item
         return None
 
@@ -304,7 +321,22 @@ class Character:
             if (unequipped_item := self.equipped.remove(item)) != None:
                 if isinstance(item, Item) and isinstance(item, CanEquip):
                     item.on_unequip(player=self, opponent=self.opponent)
+                    if (_equipped_at := self.equipped_at(item)) is not None:
+                        self.equip_slots[_equipped_at] = None
                     return unequipped_item
+        return None
+
+    def equipped_at(self, item: "Item") -> EquipAt | None:
+        for k, v in self.equip_slots.items():
+            if v == item:
+                return k
+        return None
+
+    def can_equip_at(self, item: "Item") -> EquipAt | None:
+        if isinstance(item, CanEquip):
+            for equip_at in item.equip_at:
+                if self.equip_slots[equip_at] is None:
+                    return equip_at
         return None
 
     def can_consume(self, item: "Item") -> bool:

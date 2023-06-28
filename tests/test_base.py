@@ -73,6 +73,7 @@ DIC: dict[str, Any] = {
             "agility": 8,
             "luck": 9,
         },
+        "equip_at": [EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
     },
     "item_can_consume": {
         "stat_on_consume": {
@@ -153,8 +154,13 @@ class TestCharacter(TestCase):
 
         self.assertEqual(self.player.equip(item_can_equip3), None)
         self.assertEqual(self.player.equip(self.item_can_equip), self.item_can_equip)
+        self.assertEqual(
+            self.player.equip_slots[EquipAt.HAND_LEFT], self.item_can_equip
+        )
         self.assertEqual(self.player.equip(self.item_can_equip), None)
         self.assertEqual(self.player.equip(item_can_equip2), item_can_equip2)
+        self.assertEqual(self.player.equip_slots[EquipAt.HAND_RIGHT], item_can_equip2)
+        self.assertEqual(self.player.can_equip_at(self.item_can_equip), None)
 
         self.assertEqual(
             self.player.equipped.group,
@@ -181,6 +187,8 @@ class TestCharacter(TestCase):
         )
 
         self.assertEqual(self.player.unequip(self.item_can_equip), self.item_can_equip)
+        self.assertEqual(self.player.equip_slots[EquipAt.HAND_LEFT], None)
+        self.assertEqual(self.player.equip_slots[EquipAt.HAND_RIGHT], item_can_equip2)
         self.assertEqual(self.player.unequip(self.item_can_equip), None)
         self.assertEqual(self.player.unequip(self.item_can_consume), None)
         self.assertEqual(
@@ -202,6 +210,7 @@ class TestCharacter(TestCase):
                 "strength": 44,
             },
         )
+        self.assertEqual(self.player.equipped_at(self.item_can_equip), None)
 
     def test_consume(self):
         item_can_consume2 = deepcopy(self.item_can_consume)

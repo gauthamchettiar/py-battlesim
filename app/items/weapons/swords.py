@@ -1,4 +1,4 @@
-from app.base import Item, CanEquip, CanAttack, CanDefend
+from app.base import Character, EquipAt, Item, CanEquip, CanAttack
 
 
 class RustedSword(Item, CanEquip, CanAttack):
@@ -7,10 +7,15 @@ class RustedSword(Item, CanEquip, CanAttack):
             self,
             flavor={
                 "name": "RustedSword",
-                "description": "A worn-out and rusty sword",
+                "description": "A worn-out and rusty sword with limited lifespan",
             },
+            stat={"health": 5},
         )
-        CanEquip.__init__(self, stat_to_equip={"strength": 13})
+        CanEquip.__init__(
+            self,
+            stat_to_equip={"strength": 13},
+            equip_at=[EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
+        )
         CanAttack.__init__(self, stat_on_attack={"attack": 8})
 
 
@@ -22,8 +27,13 @@ class IronSword(Item, CanEquip, CanAttack):
                 "name": "IronSword",
                 "description": "A sturdy and reliable iron sword",
             },
+            stat={"health": 25},
         )
-        CanEquip.__init__(self, stat_to_equip={"strength": 15})
+        CanEquip.__init__(
+            self,
+            stat_to_equip={"strength": 15},
+            equip_at=[EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
+        )
         CanAttack.__init__(self, stat_on_attack={"attack": 12})
 
 
@@ -35,12 +45,18 @@ class SilverSword(Item, CanEquip, CanAttack):
                 "name": "SilverSword",
                 "description": "A finely crafted silver sword with a gleaming blade",
             },
+            stat={"health": 25},
         )
-        CanEquip.__init__(self, stat_to_equip={"strength": 18})
+        CanEquip.__init__(
+            self,
+            stat_to_equip={"strength": 18},
+            equip_at=[EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
+        )
         CanAttack.__init__(self, stat_on_attack={"attack": 18})
 
 
 class FlameSword(Item, CanEquip, CanAttack):
+    # NOTE: Should have a chance to inflict BURNING stat on enemy
     def __init__(self) -> None:
         Item.__init__(
             self,
@@ -48,15 +64,27 @@ class FlameSword(Item, CanEquip, CanAttack):
                 "name": "FlameSword",
                 "description": "A sword infused with the power of fire, emanating flames from its blade.",
             },
+            stat={"health": 15},
         )
-        CanEquip.__init__(self, stat_to_equip={"strength": 15, "intelligence": 10})
+        CanEquip.__init__(
+            self,
+            stat_to_equip={"strength": 15, "intelligence": 10},
+            equip_at=[EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
+        )
         CanAttack.__init__(self, stat_on_attack={"attack": 18})
 
-        # NOTE: Should implement a method to implement crit-damage on UNDEAD
-        # NOTE: Should have a chance to inflict BURNING stat on enemy
+    def can_crit(self, player: Character, opponent: Character | None) -> bool:
+        if opponent is not None and "UNDEAD" in [
+            opponent.flavor.category,
+            opponent.flavor.sub_category,
+        ]:
+            return True
+        return super().can_crit(player, opponent)
 
 
 class FrostSword(Item, CanEquip, CanAttack):
+    # NOTE: Should implement a method to shoot ice bolts
+    # NOTE: Should have a chance to inflict FREEZE stat on enemy
     def __init__(self) -> None:
         Item.__init__(
             self,
@@ -65,8 +93,9 @@ class FrostSword(Item, CanEquip, CanAttack):
                 "description": " A sword imbued with the chilling cold of ice, freezing enemies on impact.",
             },
         )
-        CanEquip.__init__(self, stat_to_equip={"strength": 12, "intelligence": 8})
+        CanEquip.__init__(
+            self,
+            stat_to_equip={"strength": 12, "intelligence": 8},
+            equip_at=[EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
+        )
         CanAttack.__init__(self, stat_on_attack={"attack": 14})
-
-        # NOTE: Should implement a method to shoot ice bolts
-        # NOTE: Should have a chance to inflict FREEZE stat on enemy
