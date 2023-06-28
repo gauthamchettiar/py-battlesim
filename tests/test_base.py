@@ -291,3 +291,20 @@ class TestCharacter(TestCase):
 
         self.opponent.can_evade = lambda: True
         self.assertEqual(self.player.attack(), 0)
+
+    def test_crit_damage(self):
+        self.battle.initiate()
+        self.player.can_crit = lambda: True
+        self.assertEqual(self.player.equip(self.item_weapon), self.item_weapon)
+
+        self.assertEqual(
+            self.player.attack(),
+            (
+                damage1 := (
+                    DIC["player"]["stat"]["attack"]
+                    + DIC["item_can_equip"]["stat_on_equip"]["attack"]
+                    + DIC["item_can_attack"]["stat_on_attack"]["attack"]
+                )
+                * 2
+            ),
+        )

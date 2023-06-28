@@ -6,10 +6,8 @@ from attrs import asdict
 
 from typing import Any
 
-# TODO : Remove confusing **kwargs from everywhere
 # TODO : Add logic for equipment placing - hand, finger1-2 etc.
 # TODO : Add logic for StatusEffect/Ability
-# TODO : Add logic for crit attack
 # TODO : Add logic for weapons to have custom actions
 
 
@@ -150,11 +148,17 @@ class CanAttack:
 
     def pre_attack(self, player: "Character", opponent: "Character | None"):
         player.stat += self.stat_on_attack
+        player.stat.attack += (
+            self.stat_on_attack.attack if self.can_crit(player, opponent) else 0
+        )
 
     def post_attack(
         self, player: "Character", opponent: "Character | None", damage_done=None
     ):
         player.stat -= self.stat_on_attack
+        player.stat.attack -= (
+            self.stat_on_attack.attack if self.can_crit(player, opponent) else 0
+        )
 
     def on_attack(self, player: "Character", opponent: "Character | None") -> int:
         self.pre_attack(player, opponent)
@@ -169,9 +173,6 @@ class CanDefend:
 
     def can_defend(self, player: "Character", opponent: "Character | None"):
         return True
-
-    def can_evade(self, player: "Character", opponent: "Character | None") -> bool:
-        return False
 
     def pre_defend(self, player: "Character", opponent: "Character | None"):
         player.stat += self.stat_on_defend
@@ -195,6 +196,12 @@ class Character:
 
     def can_crit(self) -> bool:
         return False
+
+    @property
+    def calculated_attack(self) -> int:
+        if self.can_crit():
+            return self.stat.attack * 2
+        return self.stat.attack
 
     def can_evade(self) -> bool:
         return self.stat.agility >= self._chance
@@ -241,7 +248,9 @@ class Character:
     def defend(self) -> int:
         defend_status = self.defend_status()
         opponent_attack = (
-            self.opponent.stat.attack if isinstance(self.opponent, Character) else 0
+            self.opponent.calculated_attack
+            if isinstance(self.opponent, Character)
+            else 0
         )
         if defend_status is DefendStatus.DEFEND_SUCCESS:
             defendable_items = [
