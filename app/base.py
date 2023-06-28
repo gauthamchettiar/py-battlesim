@@ -5,7 +5,6 @@ from attrs import asdict
 
 from typing import Any
 
-# TODO : Change logic to remove self.opponent and instead pass it while attack player.attack(opponent)
 # TODO : Add logic for equipment placing - hand, finger1-2 etc.
 # TODO : Add logic for StatusEffect/Ability
 # TODO : Add logic for crit attack
@@ -185,6 +184,9 @@ class Character:
         self.equipped = ItemGroup(group={})
         self.opponent: Character | None = None
 
+    def initiate_battle(self, opponent: "Character"):
+        self.opponent = opponent
+
     def can_attack(self, **kwargs) -> bool:
         return self.stat.agility >= self._chance
 
@@ -223,14 +225,16 @@ class Character:
                 ]
 
                 for item in defendable_items:
-                    item.pre_defend()
+                    item.pre_defend(**dict(kwargs, player=self, opponent=self.opponent))
 
                 damage_taken -= self.stat.defense if len(defendable_items) > 0 else 0
 
                 self.take_damage(damage_taken)
 
                 for item in defendable_items:
-                    item.post_defend()
+                    item.post_defend(
+                        **dict(kwargs, player=self, opponent=self.opponent)
+                    )
             else:
                 self.take_damage(damage_taken)
             return damage_taken
@@ -289,5 +293,6 @@ class Battle:
         self.player = player
         self.opponent = opponent
 
-        self.player.opponent = opponent
-        self.opponent.opponent = player
+    def initiate(self):
+        self.player.initiate_battle(self.opponent)
+        self.opponent.initiate_battle(self.player)

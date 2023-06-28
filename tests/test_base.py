@@ -102,7 +102,7 @@ DIC: dict[str, Any] = {
     },
     "item_can_defend": {
         "stat_on_defend": {
-            "health": 8,
+            "health": 0,
             "attack": 7,
             "defense": 6,
             "strength": 5,
@@ -130,11 +130,13 @@ class TestCharacter(TestCase):
         self.item_shield: ItemShield | None = ItemShield(
             **DIC["item_can_equip"], **DIC["item_can_defend"]
         )
+        self.battle: Battle | None = Battle(self.player, self.opponent)
 
     def tearDown(self) -> None:
         self.player, self.opponent = None, None
         self.item_can_equip, self.item_can_consume = None, None
         self.item_weapon, self.item_shield = None, None
+        self.battle = None
 
     def test_stat(self):
         self.assertEqual(self.player.stat.to_dict(), DIC["player"]["stat"])
@@ -237,28 +239,54 @@ class TestCharacter(TestCase):
 
         self.assertEqual(self.player.attack(), 0)
 
-        self.player.opponent = self.opponent
-        self.opponent.opponent = self.player
+        self.battle.initiate()
 
         self.assertEqual(self.player.attack(), 0)
         self.assertEqual(self.player.equip(self.item_weapon), self.item_weapon)
-        self.assertEqual(self.player.attack(), 44)
-        self.assertEqual(self.opponent.stat.health, -35)
+        self.assertEqual(
+            self.player.attack(),
+            (
+                damage1 := DIC["player"]["stat"]["attack"]
+                + DIC["item_can_equip"]["stat_on_equip"]["attack"]
+                + DIC["item_can_attack"]["stat_on_attack"]["attack"]
+            ),
+        )
+        self.assertEqual(
+            self.opponent.stat.health,
+            (health1 := DIC["opponent"]["stat"]["health"] - damage1),
+        )
 
         self.item_shield.stat_to_equip = Stat(
             **{k: -99 for k in self.item_shield.stat_to_equip.to_dict().keys()}
         )
 
         self.assertEqual(self.opponent.equip(self.item_shield), self.item_shield)
-        self.assertEqual(self.player.attack(), 12)
-        self.assertEqual(self.opponent.stat.health, -46)
+        self.assertEqual(
+            self.opponent.stat.health,
+            (health1 := health1 + DIC["item_can_equip"]["stat_on_equip"]["health"]),
+        )
+        self.assertEqual(
+            self.player.attack(),
+            (
+                damage2 := damage1
+                - (
+                    DIC["opponent"]["stat"]["defense"]
+                    + DIC["item_can_equip"]["stat_on_equip"]["defense"]
+                    + DIC["item_can_defend"]["stat_on_defend"]["defense"]
+                )
+            ),
+        )
+        self.assertEqual(
+            self.opponent.stat.health,
+            (health2 := health1 - damage2),
+        )
 
         self.player.can_attack = lambda: False
         self.assertEqual(self.player.attack(), 0)
         self.player.can_attack = lambda: True
 
         self.opponent.can_defend = lambda player, opponent: False
-        self.assertEqual(self.player.attack(), 44)
+        self.assertEqual(self.player.attack(), damage1)
         self.opponent.can_defend = lambda player, opponent: True
 
         self.opponent.can_evade = lambda player, opponent: True
