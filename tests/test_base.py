@@ -8,7 +8,7 @@ import random
 
 random.seed(0)
 
-DIC: dict[str, Any] = {
+TEST_INPUT: dict[str, Any] = {
     "player": {
         "flavor": {
             "name": "Player",
@@ -119,17 +119,19 @@ DIC: dict[str, Any] = {
 
 class TestCharacter(TestCase):
     def setUp(self) -> None:
-        self.player: Character | None = Character(**DIC["player"])
-        self.opponent: Character | None = Character(**DIC["opponent"])
-        self.item_can_equip: ItemCanEquip | None = ItemCanEquip(**DIC["item_can_equip"])
+        self.player: Character | None = Character(**TEST_INPUT["player"])
+        self.opponent: Character | None = Character(**TEST_INPUT["opponent"])
+        self.item_can_equip: ItemCanEquip | None = ItemCanEquip(
+            **TEST_INPUT["item_can_equip"]
+        )
         self.item_can_consume: ItemCanConsume | None = ItemCanConsume(
-            **DIC["item_can_consume"]
+            **TEST_INPUT["item_can_consume"]
         )
         self.item_weapon: ItemWeapon | None = ItemWeapon(
-            **DIC["item_can_equip"], **DIC["item_can_attack"]
+            **TEST_INPUT["item_can_equip"], **TEST_INPUT["item_can_attack"]
         )
         self.item_shield: ItemShield | None = ItemShield(
-            **DIC["item_can_equip"], **DIC["item_can_defend"]
+            **TEST_INPUT["item_can_equip"], **TEST_INPUT["item_can_defend"]
         )
         self.battle: Battle | None = Battle(self.player, self.opponent)
 
@@ -140,8 +142,8 @@ class TestCharacter(TestCase):
         self.battle = None
 
     def test_stat(self):
-        self.assertEqual(self.player.stat.to_dict(), DIC["player"]["stat"])
-        self.assertEqual(self.player.flavor.to_dict(), DIC["player"]["flavor"])
+        self.assertEqual(self.player.stat.to_dict(), TEST_INPUT["player"]["stat"])
+        self.assertEqual(self.player.flavor.to_dict(), TEST_INPUT["player"]["flavor"])
         self.assertTrue(self.player.stat.is_alive)
 
     def test_equip_unequip(self):
@@ -155,12 +157,14 @@ class TestCharacter(TestCase):
         self.assertEqual(self.player.equip(item_can_equip3), None)
         self.assertEqual(self.player.equip(self.item_can_equip), self.item_can_equip)
         self.assertEqual(
-            self.player.equip_slots[EquipAt.HAND_LEFT], self.item_can_equip
+            self.player.equipped.equip_slots[EquipAt.HAND_LEFT], self.item_can_equip
         )
         self.assertEqual(self.player.equip(self.item_can_equip), None)
         self.assertEqual(self.player.equip(item_can_equip2), item_can_equip2)
-        self.assertEqual(self.player.equip_slots[EquipAt.HAND_RIGHT], item_can_equip2)
-        self.assertEqual(self.player.can_equip_at(self.item_can_equip), None)
+        self.assertEqual(
+            self.player.equipped.equip_slots[EquipAt.HAND_RIGHT], item_can_equip2
+        )
+        self.assertEqual(self.player.equipped.can_equip_at(self.item_can_equip), None)
 
         self.assertEqual(
             self.player.equipped.group,
@@ -187,8 +191,10 @@ class TestCharacter(TestCase):
         )
 
         self.assertEqual(self.player.unequip(self.item_can_equip), self.item_can_equip)
-        self.assertEqual(self.player.equip_slots[EquipAt.HAND_LEFT], None)
-        self.assertEqual(self.player.equip_slots[EquipAt.HAND_RIGHT], item_can_equip2)
+        self.assertEqual(self.player.equipped.equip_slots[EquipAt.HAND_LEFT], None)
+        self.assertEqual(
+            self.player.equipped.equip_slots[EquipAt.HAND_RIGHT], item_can_equip2
+        )
         self.assertEqual(self.player.unequip(self.item_can_equip), None)
         self.assertEqual(self.player.unequip(self.item_can_consume), None)
         self.assertEqual(
@@ -210,7 +216,7 @@ class TestCharacter(TestCase):
                 "strength": 44,
             },
         )
-        self.assertEqual(self.player.equipped_at(self.item_can_equip), None)
+        self.assertEqual(self.player.equipped.equipped_at(self.item_can_equip), None)
 
     def test_consume(self):
         item_can_consume2 = deepcopy(self.item_can_consume)
@@ -255,14 +261,14 @@ class TestCharacter(TestCase):
         self.assertEqual(
             self.player.attack(),
             (
-                damage1 := DIC["player"]["stat"]["attack"]
-                + DIC["item_can_equip"]["stat_on_equip"]["attack"]
-                + DIC["item_can_attack"]["stat_on_attack"]["attack"]
+                damage1 := TEST_INPUT["player"]["stat"]["attack"]
+                + TEST_INPUT["item_can_equip"]["stat_on_equip"]["attack"]
+                + TEST_INPUT["item_can_attack"]["stat_on_attack"]["attack"]
             ),
         )
         self.assertEqual(
             self.opponent.stat.health,
-            (health1 := DIC["opponent"]["stat"]["health"] - damage1),
+            (health1 := TEST_INPUT["opponent"]["stat"]["health"] - damage1),
         )
 
         self.item_shield.stat_to_equip = Stat(
@@ -272,16 +278,19 @@ class TestCharacter(TestCase):
         self.assertEqual(self.opponent.equip(self.item_shield), self.item_shield)
         self.assertEqual(
             self.opponent.stat.health,
-            (health1 := health1 + DIC["item_can_equip"]["stat_on_equip"]["health"]),
+            (
+                health1 := health1
+                + TEST_INPUT["item_can_equip"]["stat_on_equip"]["health"]
+            ),
         )
         self.assertEqual(
             self.player.attack(),
             (
                 damage2 := damage1
                 - (
-                    DIC["opponent"]["stat"]["defense"]
-                    + DIC["item_can_equip"]["stat_on_equip"]["defense"]
-                    + DIC["item_can_defend"]["stat_on_defend"]["defense"]
+                    TEST_INPUT["opponent"]["stat"]["defense"]
+                    + TEST_INPUT["item_can_equip"]["stat_on_equip"]["defense"]
+                    + TEST_INPUT["item_can_defend"]["stat_on_defend"]["defense"]
                 )
             ),
         )
@@ -310,9 +319,9 @@ class TestCharacter(TestCase):
             self.player.attack(),
             (
                 damage1 := (
-                    DIC["player"]["stat"]["attack"]
-                    + DIC["item_can_equip"]["stat_on_equip"]["attack"]
-                    + DIC["item_can_attack"]["stat_on_attack"]["attack"]
+                    TEST_INPUT["player"]["stat"]["attack"]
+                    + TEST_INPUT["item_can_equip"]["stat_on_equip"]["attack"]
+                    + TEST_INPUT["item_can_attack"]["stat_on_attack"]["attack"]
                 )
                 * 2
             ),

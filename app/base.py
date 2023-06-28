@@ -3,9 +3,8 @@ import random
 from attrs import define, field
 from attrs import asdict
 
-from typing import Any
+from typing import Any, cast
 
-# TODO : Add logic for equipment placing - hand, finger1-2 etc.
 # TODO : Add logic for StatusEffect/Ability
 # TODO : Add logic for weapons to have custom actions
 
@@ -117,6 +116,41 @@ class ItemGroup:
         return self._get_filtered(CanDefend)
 
 
+class EquipGroup(ItemGroup):
+    def __init__(self) -> None:
+        super().__init__(cast(dict[str, "Item | CanEquip"], {}))
+        self.equip_slots: dict[EquipAt, Item | None] = {k: None for k in EquipAt}
+
+    def add(self, item: "Item | CanEquip") -> Item | None:
+        if (_can_equip_at := self.can_equip_at(item)) is not None and (
+            equipped_item := super().add(item)
+        ) is not None:
+            self.equip_slots[_can_equip_at] = equipped_item
+            return equipped_item
+        return None
+
+    def remove(self, item: "Item | CanEquip") -> Item | None:
+        if (_equipped_at := self.equipped_at(item)) is not None and (
+            unequipped_item := super().remove(item)
+        ) is not None:
+            self.equip_slots[_equipped_at] = None
+            return unequipped_item
+        return None
+
+    def equipped_at(self, item: "Item | CanEquip") -> EquipAt | None:
+        for k, v in self.equip_slots.items():
+            if v == item:
+                return k
+        return None
+
+    def can_equip_at(self, item: "Item | CanEquip") -> EquipAt | None:
+        if isinstance(item, CanEquip):
+            for equip_at in item.equip_at:
+                if self.equip_slots[equip_at] is None:
+                    return equip_at
+        return None
+
+
 class CanEquip:
     def __init__(self, **kwargs) -> None:
         self.stat_to_equip = Stat(**kwargs.get("stat_to_equip", {}))
@@ -189,7 +223,9 @@ class CanDefend:
     def pre_defend(self, player: "Character", opponent: "Character | None"):
         player.stat += self.stat_on_defend
 
-    def post_defend(self, player: "Character", opponent: "Character | None"):
+    def post_defend(
+        self, player: "Character", opponent: "Character | None", damage_done=None
+    ):
         player.stat -= self.stat_on_defend
 
 
@@ -198,60 +234,53 @@ class Character:
         self.flavor = FlavorStat(**kwargs.get("flavor", {}))
         self.stat = Stat(**kwargs.get("stat", {}))
 
-        self.equipped = ItemGroup(group={})
-        self.equip_slots: dict[EquipAt, Item | None] = {k: None for k in EquipAt}
+        self.equipped = EquipGroup()
 
         self.opponent: Character | None = None
 
-    def initiate_battle(self, opponent: "Character"):
-        self.opponent = opponent
-
-    def can_attack(self) -> bool:
-        return self.stat.agility >= self._chance
-
-    def can_crit(self) -> bool:
-        return False
-
-    @property
     def calculated_attack(self) -> int:
         if self.can_crit():
             return self.stat.attack * 2
         return self.stat.attack
 
+    def can_attack(self) -> bool:
+        return self.stat.agility >= self._chance()
+
+    def can_crit(self) -> bool:
+        return False
+
     def can_evade(self) -> bool:
-        return self.stat.agility >= self._chance
+        return self.stat.agility >= self._chance()
 
     def can_defend(self) -> bool:
         return True
 
-    def attack_status(self) -> AttackStatus:
-        if self.can_attack():
-            if any(
-                [
-                    item.can_attack(self, self.opponent)
-                    for item in self.equipped.get_items_that_can_attack().values()
-                ]
-            ):
-                return AttackStatus.ATTACK_SUCCESS
-            return AttackStatus.ATTACK_NOT_POSSIBLE
-        return AttackStatus.ATTACK_MISSED
+    def can_equip(self, item: "Item") -> bool:
+        return (
+            isinstance(item, Item)
+            and isinstance(item, CanEquip)
+            and item.can_equip(player=self, opponent=self.opponent)
+        )
 
-    def defend_status(self) -> DefendStatus:
-        if not self.can_evade():
-            if self.can_defend():
-                if any(
-                    [
-                        item.can_defend(self, self.opponent)
-                        for item in self.equipped.get_items_that_can_defend().values()
-                    ]
-                ):
-                    return DefendStatus.DEFEND_SUCCESS
-                return DefendStatus.DEFEND_NOT_POSSIBLE
-            return DefendStatus.DEFEND_FAILED
-        return DefendStatus.ATTACK_EVADED
+    def can_unequip(self, item: "Item") -> bool:
+        return (
+            isinstance(item, Item)
+            and isinstance(item, CanEquip)
+            and item.can_unequip(player=self, opponent=self.opponent)
+        )
+
+    def can_consume(self, item: "Item") -> bool:
+        return (
+            isinstance(item, Item)
+            and isinstance(item, CanConsume)
+            and item.can_consume(player=self, opponent=self.opponent)
+        )
+
+    def initiate_battle(self, opponent: "Character"):
+        self.opponent = opponent
 
     def attack(self) -> int:
-        attack_status = self.attack_status()
+        attack_status = self._attack_status()
         if attack_status is AttackStatus.ATTACK_SUCCESS:
             damage_done = 0
             for item in self.equipped.get_items_that_can_attack().values():
@@ -261,9 +290,9 @@ class Character:
         return 0
 
     def defend(self) -> int:
-        defend_status = self.defend_status()
+        defend_status = self._defend_status()
         opponent_attack = (
-            self.opponent.calculated_attack
+            self.opponent.calculated_attack()
             if isinstance(self.opponent, Character)
             else 0
         )
@@ -279,7 +308,7 @@ class Character:
 
             opponent_attack -= self.stat.defense if len(defendable_items) > 0 else 0
 
-            self.take_damage(opponent_attack)
+            self._take_damage(opponent_attack)
 
             for item in defendable_items:
                 item.post_defend(player=self, opponent=self.opponent)
@@ -288,73 +317,69 @@ class Character:
             DefendStatus.DEFEND_NOT_POSSIBLE,
             DefendStatus.DEFEND_FAILED,
         ]:
-            self.take_damage(opponent_attack)
+            self._take_damage(opponent_attack)
             return opponent_attack
         return 0
 
-    def take_damage(self, damage: int):
-        if damage > 0:
-            self.stat.health -= damage
-
-    def can_equip(self, item: "Item") -> bool:
-        if isinstance(item, Item) and isinstance(item, CanEquip):
-            return item.can_equip(player=self, opponent=self.opponent)
-        return False
-
-    def can_unequip(self, item: "Item") -> bool:
-        if isinstance(item, Item) and isinstance(item, CanEquip):
-            return item.can_unequip(player=self, opponent=self.opponent)
-        return False
-
     def equip(self, item: "Item") -> Item | None:
-        if self.can_equip(item):
-            if (equipped_item := self.equipped.add(item)) != None:
-                if isinstance(item, Item) and isinstance(item, CanEquip):
-                    item.on_equip(player=self, opponent=self.opponent)
-                    if (_can_equip_at := self.can_equip_at(item)) is not None:
-                        self.equip_slots[_can_equip_at] = item
-                    return equipped_item
+        if (
+            self.can_equip(item)
+            and self.equipped.add(item) is not None
+            and isinstance(item, CanEquip)
+        ):
+            item.on_equip(player=self, opponent=self.opponent)
+            return item
         return None
 
     def unequip(self, item: "Item") -> Item | None:
-        if self.can_unequip(item):
-            if (unequipped_item := self.equipped.remove(item)) != None:
-                if isinstance(item, Item) and isinstance(item, CanEquip):
-                    item.on_unequip(player=self, opponent=self.opponent)
-                    if (_equipped_at := self.equipped_at(item)) is not None:
-                        self.equip_slots[_equipped_at] = None
-                    return unequipped_item
+        if (
+            self.can_unequip(item)
+            and self.equipped.remove(item) is not None
+            and isinstance(item, CanEquip)
+        ):
+            item.on_unequip(player=self, opponent=self.opponent)
+            return item
         return None
-
-    def equipped_at(self, item: "Item") -> EquipAt | None:
-        for k, v in self.equip_slots.items():
-            if v == item:
-                return k
-        return None
-
-    def can_equip_at(self, item: "Item") -> EquipAt | None:
-        if isinstance(item, CanEquip):
-            for equip_at in item.equip_at:
-                if self.equip_slots[equip_at] is None:
-                    return equip_at
-        return None
-
-    def can_consume(self, item: "Item") -> bool:
-        if isinstance(item, Item) and isinstance(item, CanConsume):
-            return item.can_consume(player=self, opponent=self.opponent)
-        return False
 
     def consume(self, item: "Item") -> Item | None:
-        if self.can_consume(item):
-            if isinstance(item, Item) and isinstance(item, CanConsume):
-                item.on_consume(player=self, opponent=self.opponent)
-                return item
+        if self.can_consume(item) and isinstance(item, CanConsume):
+            item.on_consume(player=self, opponent=self.opponent)
+            return item
         return None
 
-    @property
     def _chance(self):
         _max = 100 - self.stat.luck if self.stat.luck < 99 else 99
         return random.randint(0, _max)
+
+    def _attack_status(self) -> AttackStatus:
+        if self.can_attack():
+            if any(
+                [
+                    item.can_attack(self, self.opponent)
+                    for item in self.equipped.get_items_that_can_attack().values()
+                ]
+            ):
+                return AttackStatus.ATTACK_SUCCESS
+            return AttackStatus.ATTACK_NOT_POSSIBLE
+        return AttackStatus.ATTACK_MISSED
+
+    def _defend_status(self) -> DefendStatus:
+        if not self.can_evade():
+            if self.can_defend():
+                if any(
+                    [
+                        item.can_defend(self, self.opponent)
+                        for item in self.equipped.get_items_that_can_defend().values()
+                    ]
+                ):
+                    return DefendStatus.DEFEND_SUCCESS
+                return DefendStatus.DEFEND_NOT_POSSIBLE
+            return DefendStatus.DEFEND_FAILED
+        return DefendStatus.ATTACK_EVADED
+
+    def _take_damage(self, damage: int):
+        if damage > 0:
+            self.stat.health -= damage
 
 
 class Battle:
