@@ -285,9 +285,9 @@ class TestCharacter(TestCase):
         self.assertEqual(self.player.attack(), 0)
         self.player.can_attack = lambda: True
 
-        self.opponent.can_defend = lambda player, opponent: False
+        self.opponent.can_defend = lambda: False
         self.assertEqual(self.player.attack(), damage1)
-        self.opponent.can_defend = lambda player, opponent: True
+        self.opponent.can_defend = lambda: True
 
-        self.opponent.can_evade = lambda player, opponent: True
+        self.opponent.can_evade = lambda: True
         self.assertEqual(self.player.attack(), 0)
