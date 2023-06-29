@@ -37,3 +37,9 @@ class ItemShield(Item, CanDefend, CanEquip):
         Item.__init__(self, **kwargs)
         CanDefend.__init__(self, **kwargs)
         CanEquip.__init__(self, **kwargs)
+
+
+class ItemStatus(Item, IsStatus):
+    def __init__(self, **kwargs) -> None:
+        Item.__init__(self, **kwargs)
+        IsStatus.__init__(self, **kwargs)

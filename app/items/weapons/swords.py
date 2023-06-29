@@ -1,4 +1,5 @@
 from app.base import Character, EquipAt, Item, CanEquip, CanAttack
+from app.status.afflictions import Burning, Freeze
 
 
 class RustedSword(Item, CanEquip, CanAttack):
@@ -56,7 +57,6 @@ class SilverSword(Item, CanEquip, CanAttack):
 
 
 class FlameSword(Item, CanEquip, CanAttack):
-    # NOTE: Should have a chance to inflict BURNING stat on enemy
     def __init__(self) -> None:
         Item.__init__(
             self,
@@ -81,10 +81,14 @@ class FlameSword(Item, CanEquip, CanAttack):
             return True
         return super().can_crit(player, opponent)
 
+    def on_attack(self, player: Character, opponent: Character | None) -> int:
+        if player._chance() > 75 and opponent is not None:
+            opponent.apply(Burning())
+        return super().on_attack(player, opponent)
+
 
 class FrostSword(Item, CanEquip, CanAttack):
     # NOTE: Should implement a method to shoot ice bolts
-    # NOTE: Should have a chance to inflict FREEZE stat on enemy
     def __init__(self) -> None:
         Item.__init__(
             self,
@@ -99,3 +103,8 @@ class FrostSword(Item, CanEquip, CanAttack):
             equip_at=[EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
         )
         CanAttack.__init__(self, stat_on_attack={"attack": 14})
+
+    def on_attack(self, player: Character, opponent: Character | None) -> int:
+        if player._chance() > 75 and opponent is not None:
+            opponent.apply(Freeze())
+        return super().on_attack(player, opponent)

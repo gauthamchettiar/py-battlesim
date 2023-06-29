@@ -50,6 +50,11 @@ class TestSwords(TestCase):
         self.assertEqual(self.player.attack(), 18)
         self.opponent.flavor.category = "UNDEAD"
         self.assertEqual(self.player.attack(), 36)
+        self.assertTrue(
+            isinstance(
+                self.opponent.status_effect.group[Burning().flavor.name], Burning
+            )
+        )
 
     def test_FrostSword(self):
         sword = FrostSword()
@@ -59,3 +64,7 @@ class TestSwords(TestCase):
         self.assertTrue(sword.flavor.name in self.player.equipped.group)
         self.assertEqual(self.player.stat.attack, 0)
         self.assertEqual(self.player.attack(), 14)
+        self.assertEqual(self.player.attack(), 14)
+        self.assertTrue(
+            isinstance(self.opponent.status_effect.group[Freeze().flavor.name], Freeze)
+        )

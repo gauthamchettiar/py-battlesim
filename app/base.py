@@ -151,6 +151,11 @@ class EquipGroup(ItemGroup):
         return None
 
 
+class StatusGroup(ItemGroup):
+    def __init__(self) -> None:
+        super().__init__(cast(dict[str, "Item | IsStatus"], {}))
+
+
 class CanEquip:
     def __init__(self, **kwargs) -> None:
         self.stat_to_equip = Stat(**kwargs.get("stat_to_equip", {}))
@@ -164,9 +169,11 @@ class CanEquip:
         return True
 
     def on_equip(self, player: "Character", opponent: "Character | None"):
+        player.invoke_status_effect("item_on_equip", item=self)
         player.stat += self.stat_on_equip
 
     def on_unequip(self, player: "Character", opponent: "Character | None"):
+        player.invoke_status_effect("item_on_unequip", item=self)
         player.stat -= self.stat_on_equip
 
 
@@ -179,6 +186,7 @@ class CanConsume:
         return player.stat >= self.stat_to_consume
 
     def on_consume(self, player: "Character", opponent: "Character | None"):
+        player.invoke_status_effect("item_on_consume", item=self)
         player.stat += self.stat_on_consume
 
 
@@ -193,6 +201,7 @@ class CanAttack:
         return False
 
     def pre_attack(self, player: "Character", opponent: "Character | None"):
+        player.invoke_status_effect("item_pre_attack", item=self)
         player.stat += self.stat_on_attack
         player.stat.attack += (
             self.stat_on_attack.attack if self.can_crit(player, opponent) else 0
@@ -201,6 +210,7 @@ class CanAttack:
     def post_attack(
         self, player: "Character", opponent: "Character | None", damage_done=None
     ):
+        player.invoke_status_effect("item_post_attack", item=self)
         player.stat -= self.stat_on_attack
         player.stat.attack -= (
             self.stat_on_attack.attack if self.can_crit(player, opponent) else 0
@@ -221,12 +231,36 @@ class CanDefend:
         return True
 
     def pre_defend(self, player: "Character", opponent: "Character | None"):
+        player.invoke_status_effect("item_pre_defend", item=self)
         player.stat += self.stat_on_defend
 
     def post_defend(
         self, player: "Character", opponent: "Character | None", damage_done=None
     ):
+        player.invoke_status_effect("item_post_defend", item=self)
         player.stat -= self.stat_on_defend
+
+
+class IsStatus:
+    def __init__(self, **kwargs) -> None:
+        self.is_active = True
+
+    def can_apply(self, player: "Character", opponent: "Character | None") -> bool:
+        return True
+
+    def can_unapply(self, player: "Character", opponent: "Character | None") -> bool:
+        return True
+
+    def on_apply(self, player: "Character", opponent: "Character | None"):
+        player.invoke_status_effect("item_on_apply", item=self)
+
+    def on_unapply(self, player: "Character", opponent: "Character | None"):
+        player.invoke_status_effect("item_on_unapply", item=self)
+
+    def on(
+        self, player: "Character", opponent: "Character | None", stage: str, **kwargs
+    ):
+        pass
 
 
 class Character:
@@ -235,6 +269,7 @@ class Character:
         self.stat = Stat(**kwargs.get("stat", {}))
 
         self.equipped = EquipGroup()
+        self.status_effect = StatusGroup()
 
         self.opponent: Character | None = None
 
@@ -276,17 +311,40 @@ class Character:
             and item.can_consume(player=self, opponent=self.opponent)
         )
 
+    def can_apply(self, item: "Item") -> bool:
+        return (
+            isinstance(item, Item)
+            and isinstance(item, IsStatus)
+            and item.can_apply(player=self, opponent=self.opponent)
+        )
+
+    def can_unapply(self, item: "Item") -> bool:
+        return (
+            isinstance(item, Item)
+            and isinstance(item, IsStatus)
+            and item.can_unapply(player=self, opponent=self.opponent)
+        )
+
     def initiate_battle(self, opponent: "Character"):
         self.opponent = opponent
 
     def attack(self) -> int:
         attack_status = self._attack_status()
+        self.invoke_status_effect("character_pre_attack", attack_status=attack_status)
         if attack_status is AttackStatus.ATTACK_SUCCESS:
             damage_done = 0
             for item in self.equipped.get_items_that_can_attack().values():
                 if item.can_attack(player=self, opponent=self.opponent):
                     damage_done += item.on_attack(player=self, opponent=self.opponent)
+            self.invoke_status_effect(
+                "character_post_attack",
+                attack_status=attack_status,
+                damage_done=damage_done,
+            )
             return damage_done
+        self.invoke_status_effect(
+            "character_post_attack", attack_status=attack_status, damage_done=0
+        )
         return 0
 
     def defend(self) -> int:
@@ -295,6 +353,11 @@ class Character:
             self.opponent.calculated_attack()
             if isinstance(self.opponent, Character)
             else 0
+        )
+        self.invoke_status_effect(
+            "character_pre_defend",
+            attack_status=defend_status,
+            opponent_attack=opponent_attack,
         )
         if defend_status is DefendStatus.DEFEND_SUCCESS:
             defendable_items = [
@@ -312,13 +375,28 @@ class Character:
 
             for item in defendable_items:
                 item.post_defend(player=self, opponent=self.opponent)
+            self.invoke_status_effect(
+                "character_post_defend",
+                attack_status=defend_status,
+                opponent_attack=opponent_attack,
+            )
             return opponent_attack
         elif defend_status in [
             DefendStatus.DEFEND_NOT_POSSIBLE,
             DefendStatus.DEFEND_FAILED,
         ]:
             self._take_damage(opponent_attack)
+            self.invoke_status_effect(
+                "character_post_defend",
+                attack_status=defend_status,
+                opponent_attack=opponent_attack,
+            )
             return opponent_attack
+        self.invoke_status_effect(
+            "character_post_defend",
+            attack_status=defend_status,
+            opponent_attack=opponent_attack,
+        )
         return 0
 
     def equip(self, item: "Item") -> Item | None:
@@ -346,6 +424,31 @@ class Character:
             item.on_consume(player=self, opponent=self.opponent)
             return item
         return None
+
+    def apply(self, item: "Item") -> Item | None:
+        if (
+            self.can_apply(item)
+            and self.status_effect.add(item) is not None
+            and isinstance(item, IsStatus)
+        ):
+            item.on_apply(player=self, opponent=self.opponent)
+            return item
+        return None
+
+    def unapply(self, item: "Item") -> Item | None:
+        if (
+            self.can_unapply(item)
+            and self.status_effect.remove(item) is not None
+            and isinstance(item, IsStatus)
+        ):
+            item.on_unapply(player=self, opponent=self.opponent)
+            return item
+        return None
+
+    def invoke_status_effect(self, stage: str, **kwargs) -> Any:
+        for status_effect in self.status_effect.group.values():
+            if isinstance(status_effect, IsStatus):
+                status_effect.on(self, self.opponent, stage, **kwargs)
 
     def _chance(self):
         _max = 100 - self.stat.luck if self.stat.luck < 99 else 99

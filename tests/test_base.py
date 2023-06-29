@@ -133,6 +133,9 @@ class TestCharacter(TestCase):
         self.item_shield: ItemShield | None = ItemShield(
             **TEST_INPUT["item_can_equip"], **TEST_INPUT["item_can_defend"]
         )
+        self.item_status: ItemStatus | None = ItemStatus(
+            flavor={"name": "item_is_status"}
+        )
         self.battle: Battle | None = Battle(self.player, self.opponent)
 
     def tearDown(self) -> None:
@@ -326,3 +329,17 @@ class TestCharacter(TestCase):
                 * 2
             ),
         )
+
+    def test_apply_unapply(self):
+        self.assertTrue(self.player.can_apply(self.item_status))
+        self.assertTrue(self.player.can_unapply(self.item_status))
+
+        self.assertEqual(self.player.apply(self.item_status), self.item_status)
+        self.assertEqual(self.player.apply(self.item_status), None)
+        self.assertEqual(
+            self.player.status_effect.group["item_is_status"], self.item_status
+        )
+
+        self.assertEqual(self.player.unapply(self.item_status), self.item_status)
+        self.assertEqual(self.player.unapply(self.item_status), None)
+        self.assertTrue("item_is_status" not in self.player.status_effect.group)
