@@ -1,5 +1,6 @@
-from app.base import Item
+from app.base import Item, Phase
 from app.status.afflictions.elemental import Burning, Freeze
+from textwrap import dedent
 
 
 class RustedSword(Item):
@@ -8,7 +9,12 @@ class RustedSword(Item):
             self,
             flavor={
                 "name": "RustedSword",
-                "description": "A worn-out and rusty sword with limited lifespan",
+                "description": dedent(
+                    """
+                    A worn-out and rusty sword with limited lifespan.
+                    - [HEAVY] Increases Fatigue
+                    """
+                ),
                 "category": "WEAPON",
                 "sub_category": "SWORD",
             },
@@ -26,7 +32,13 @@ class IronSword(Item):
             self,
             flavor={
                 "name": "IronSword",
-                "description": "A sturdy and reliable iron sword",
+                "description": dedent(
+                    """
+                    A sturdy and reliable iron sword
+                    - [ATTACK] Has Good Health
+                    - [HEAVY] Increases Fatigue
+                    """
+                ),
                 "category": "WEAPON",
                 "sub_category": "SWORD",
             },
@@ -44,7 +56,12 @@ class SilverSword(Item):
             self,
             flavor={
                 "name": "SilverSword",
-                "description": "A finely crafted silver sword with a gleaming blade",
+                "description": dedent(
+                    """
+                    A finely crafted silver sword with a gleaming blade.
+                    - [ATTACK] Has Good Health
+                    """
+                ),
                 "category": "WEAPON",
                 "sub_category": "SWORD",
             },
@@ -62,11 +79,18 @@ class FlameSword(Item):
             self,
             flavor={
                 "name": "FlameSword",
-                "description": "A sword infused with the power of fire, emanating flames from its blade.",
+                "description": dedent(
+                    """
+                    A sword infused with the power of fire, emanating flames from its blade. 
+                    - [CRIT] Higher damage on UNDEAD
+                    - [ATTACK] Has Chance to inflict BURNING
+                    - [MAGIC INFUSED] will wear out faster.]
+                    """
+                ),
                 "category": "WEAPON",
                 "sub_category": "MAGIC_SWORD",
             },
-            stat={"health": 15, "attack": 18},
+            stat={"health": 14, "attack": 5},
             stat_to_equip={"strength": 15, "intelligence": 10},
             can_equip=True,
             can_attack=True,
@@ -92,6 +116,9 @@ class FlameSword(Item):
         if self.equipped_by.chance() < self.burning_probability:
             self.equipped_by.opponent.apply(Burning())
 
+    def wear_out(self):
+        self.stat.health -= 2
+
 
 class FrostSword(Item):
     # NOTE: Should implement a method to shoot ice bolts
@@ -100,19 +127,55 @@ class FrostSword(Item):
             self,
             flavor={
                 "name": "FrostSword",
-                "description": " A sword imbued with the chilling cold of ice, freezing enemies on impact.",
+                "description": dedent(
+                    """
+                    A sword imbued with the chilling cold of ice, freezing enemies on impact. 
+                    - [ATTACK] Has Chance to inflict FREEZE
+                    - [-4 MANA] Can shoot ICE BOLTS, has higher chance of inflicting FREEZE
+                    - [MAGIC INFUSED] Will wear out faster.]
+                    """
+                ),
                 "category": "WEAPON",
                 "sub_category": "MAGIC_SWORD",
             },
-            stat={"health": 15, "attack": 14},
+            stat={"health": 14, "attack": 5},
             stat_to_equip={"strength": 12, "intelligence": 8},
             can_equip=True,
             can_attack=True,
             can_equip_at="HAND1",
         )
         self.freeze_probability = 25
+        self.ice_bolt_freeze_probability = 60
+        self.__register_actions()
+
+    def __register_actions(self):
+        self.register_action(
+            "shoot_ice_bolts", [Phase.PLAYER_ATTACK_START], self.shoot_ice_bolts
+        )
 
     def on_attack(self):
         super().on_attack()
-        if self.equipped_by.chance() < self.freeze_probability:
+        if (
+            self.equipped_by is not None
+            and self.equipped_by.opponent is not None
+            and self.equipped_by.chance() < self.freeze_probability
+        ):
             self.equipped_by.opponent.apply(Freeze())
+
+    def shoot_ice_bolts(self, **kwargs):
+        if (
+            self.equipped_by is not None
+            and self.equipped_by.opponent is not None
+            and self.equipped_by.stat.mana >= 4
+        ):
+            if self.equipped_by.chance() < self.ice_bolt_freeze_probability:
+                self.equipped_by.opponent.apply(Freeze())
+            self.equipped_by.opponent.take_damage(
+                15
+                - self.equipped_by.opponent.defense_by_equipment
+                - self.equipped_by.opponent.stat.defense
+            )
+            self.wear_out()
+
+    def wear_out(self):
+        self.stat.health -= 2

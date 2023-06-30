@@ -116,6 +116,9 @@ class CanHaveCustomAction:
     ):
         self.actions[action_name] = (valid_action_phases, action)
 
+    def __register_action(self):
+        pass
+
 
 @define
 class FlavorStat:
@@ -208,6 +211,7 @@ class Item(CanModifyPhase, CanHaveCustomAction):
     def character_can_attack(self) -> bool:
         return (
             self.equipped_by is not None
+            and self.stat.health > 0
             and self.can_attack
             and self.flavor.name in self.equipped_by.equipped.group.keys()
         )
@@ -276,13 +280,12 @@ class Item(CanModifyPhase, CanHaveCustomAction):
 
     def on_attack(self):
         if self.equipped_by is not None and self.equipped_by.opponent is not None:
-            actual_damage = (
+            self.equipped_by.opponent.take_damage(
                 self.get_attack()
                 + self.equipped_by.stat.attack
                 - self.equipped_by.opponent.defense_by_equipment
                 - self.equipped_by.opponent.stat.defense
             )
-            self.equipped_by.opponent.take_damage(actual_damage)
             self.equipped_by.opponent.wear_out_defendables()
             self.wear_out()
 
@@ -536,6 +539,9 @@ class Battle(CanModifyPhase):
 
         Context.player.is_player = True
         Context.opponent.is_player = False
+
+    def run(self):
+        pass
 
 
 class Context:

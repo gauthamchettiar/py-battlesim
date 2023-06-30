@@ -68,6 +68,7 @@ class TestSwords(TestCase):
         sword.burning_probability = 100
         self.player.perform_item_attack()
         self.assertTrue("Burning" in self.opponent.status_affect.group.keys())
+        self.assertEqual(sword.stat.health, 8)
 
     def test_FrostSword(self):
         sword = FrostSword()
@@ -83,3 +84,6 @@ class TestSwords(TestCase):
         sword.freeze_probability = 100
         self.player.perform_item_attack()
         self.assertTrue("Freeze" in self.opponent.status_affect.group.keys())
+        sword.ice_bolt_freeze_probability = 100
+        sword.perform_action("shoot_ice_bolts")
+        self.assertEqual(sword.stat.health, 8)
