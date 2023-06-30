@@ -9,11 +9,18 @@ random.seed(0)
 
 class TestCharacter(TestCase):
     def setUp(self) -> None:
-        self.player = Character(**TEST_INPUT["player"])
-        self.opponent = Character(**TEST_INPUT["opponent"])
-        self.battle = Battle(self.player, self.opponent)
+        Context.current_phase = Phase.BATTLE_NOT_STARTED
+        self.player: Character | None = Character(**TEST_INPUT["player"])
+        self.opponent: Character | None = Character(**TEST_INPUT["opponent"])
+        self.battle: Battle | None = Battle(self.player, self.opponent)
 
-        self.item1 = Item(**TEST_INPUT["item"])
+        self.item1: Item | None = Item(**TEST_INPUT["item"])
+
+    def tearDown(self) -> None:
+        self.player = None
+        self.opponent = None
+        self.battle = None
+        self.item1 = None
 
     def test_player(self):
         self.assertEqual(Context.current_phase, Phase.BATTLE_NOT_STARTED)
@@ -24,16 +31,14 @@ class TestCharacter(TestCase):
         self.assertEqual(self.opponent.opponent, self.player)
 
         self.assertEqual(self.player.defense_by_equipment, 0)
+        Context.current_phase = Phase.PLAYER_ATTACK_START
         self.assertEqual(
-            self.player.get_available_actions(Phase.PLAYER_ATTACK_START)[
-                "perform_item_attack"
-            ],
+            self.player.get_available_actions()["perform_item_attack"],
             self.player.perform_item_attack,
         )
+        Context.current_phase = Phase.OPPONENT_ATTACK_START
         self.assertEqual(
-            self.opponent.get_available_actions(Phase.OPPONENT_ATTACK_START)[
-                "perform_item_attack"
-            ],
+            self.opponent.get_available_actions()["perform_item_attack"],
             self.opponent.perform_item_attack,
         )
 
@@ -66,3 +71,11 @@ class TestCharacter(TestCase):
         self.assertEqual(self.opponent.equip(self.item1), None)
         self.assertEqual(self.opponent.consume(self.item1), None)
         self.assertEqual(self.opponent.unequip(self.item1), None)
+
+    def test_battle(self):
+        self.assertEqual(Context.current_phase, Phase.BATTLE_NOT_STARTED)
+        self.battle.run_phase_action()
+        self.battle.switch_to_phase(Phase.BATTLE_START)
+        self.assertEqual(self.player.equip(self.item1), self.item1)
+        self.assertEqual(Context.current_phase, Phase.BATTLE_START)
+        self.battle.run_phase_action()
