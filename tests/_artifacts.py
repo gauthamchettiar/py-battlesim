@@ -1,45 +1,108 @@
-from app.base import *
+from typing import Any
 
-
-class ItemCanEquip(Item, CanEquip):
-    def __init__(self, **kwargs) -> None:
-        Item.__init__(self, **kwargs)
-        CanEquip.__init__(self, **kwargs)
-
-
-class ItemCanConsume(Item, CanConsume):
-    def __init__(self, **kwargs) -> None:
-        Item.__init__(self, **kwargs)
-        CanConsume.__init__(self, **kwargs)
-
-
-class ItemCanAttack(Item, CanAttack):
-    def __init__(self, **kwargs) -> None:
-        Item.__init__(self, **kwargs)
-        CanAttack.__init__(self, **kwargs)
-
-
-class ItemCanDefend(Item, CanDefend):
-    def __init__(self, **kwargs) -> None:
-        Item.__init__(self, **kwargs)
-        CanDefend.__init__(self, **kwargs)
-
-
-class ItemWeapon(Item, CanAttack, CanEquip):
-    def __init__(self, **kwargs) -> None:
-        Item.__init__(self, **kwargs)
-        CanAttack.__init__(self, **kwargs)
-        CanEquip.__init__(self, **kwargs)
-
-
-class ItemShield(Item, CanDefend, CanEquip):
-    def __init__(self, **kwargs) -> None:
-        Item.__init__(self, **kwargs)
-        CanDefend.__init__(self, **kwargs)
-        CanEquip.__init__(self, **kwargs)
-
-
-class ItemStatus(Item, IsStatus):
-    def __init__(self, **kwargs) -> None:
-        Item.__init__(self, **kwargs)
-        IsStatus.__init__(self, **kwargs)
+TEST_INPUT: dict[str, Any] = {
+    "player": {
+        "flavor": {
+            "name": "player",
+            "description": "Player Description",
+            "category": "SAMPLE_CAT",
+            "sub_category": "SAMPLE_SUBCAT",
+            "type": [],
+        },
+        "stat": {
+            "health": 10,
+            "attack": 20,
+            "defense": 30,
+            "strength": 40,
+            "intelligence": 50,
+            "fatigue": 60,
+            "mana": 70,
+            "agility": 100,
+            "luck": 0,
+        },
+    },
+    "opponent": {
+        "flavor": {
+            "name": "opponent",
+            "description": "Opponent Description",
+            "category": "SAMPLE_CAT2",
+            "sub_category": "SAMPLE_SUBCAT2",
+            "type": [],
+        },
+        "stat": {
+            "health": 9,
+            "attack": 19,
+            "defense": 29,
+            "strength": 39,
+            "intelligence": 49,
+            "fatigue": 59,
+            "mana": 69,
+            "agility": 0,
+            "luck": -1,
+        },
+    },
+    "item": {
+        "flavor": {"name": "item"},
+        "stat": {
+            "health": 11,
+            "attack": 22,
+            "defense": 33,
+            "strength": 44,
+            "intelligence": 55,
+            "fatigue": 66,
+            "mana": 77,
+            "agility": 88,
+            "luck": 99,
+        },
+        "stat_to_equip": {
+            "health": 10,
+            "attack": 20,
+            "defense": 30,
+            "strength": 40,
+            "intelligence": 50,
+            "fatigue": 60,
+            "mana": 70,
+            "agility": 100,
+            "luck": 0,
+        },
+        "stat_on_equip": {
+            "health": 1,
+            "attack": 2,
+            "defense": 3,
+            "strength": 4,
+            "intelligence": 5,
+            "fatigue": 6,
+            "mana": 7,
+            "agility": 8,
+            "luck": 9,
+        },
+        "stat_to_consume": {
+            "health": 10,
+            "attack": 20,
+            "defense": 30,
+            "strength": 40,
+            "intelligence": 50,
+            "fatigue": 60,
+            "mana": 70,
+            "agility": 100,
+            "luck": 0,
+        },
+        "stat_on_consume": {
+            "health": 0,
+            "attack": 1,
+            "defense": 2,
+            "strength": 3,
+            "intelligence": 4,
+            "fatigue": 5,
+            "mana": 6,
+            "agility": 7,
+            "luck": 8,
+        },
+        "can_equip_at": "HAND1",
+        "can_equip": True,
+        "can_unequip": True,
+        "can_consume": True,
+        "can_attack": True,
+        "can_defend": True,
+    },
+}

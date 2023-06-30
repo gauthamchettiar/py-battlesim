@@ -1,37 +1,132 @@
 from enum import Enum
-import random
-from attrs import define, field
-from attrs import asdict
+from attr import define, field, asdict
+from typing import Any, Tuple, Callable
+from random import randint
 
-from typing import Any, cast
 
-# TODO : Add logic for StatusEffect/Ability
-# TODO : Add logic for weapons to have custom actions
+class Phase(Enum):
+    BATTLE_NOT_STARTED = "BATTLE_NOT_STARTED"
+    BATTLE_START = "BATTLE_START"
+    BATTLE_END = "BATTLE_END"
+    TURN_START = "TURN_START"
+    TURN_END = "TURN_END"
+    PLAYER_ATTACK_START = "PLAYER_ATTACK_START"
+    PLAYER_ATTACK_END = "PLAYER_ATTACK_END"
+    OPPONENT_ATTACK_START = "OPPONENT_ATTACK_START"
+    OPPONENT_ATTACK_END = "OPPONENT_ATTACK_END"
 
 
 class AttackStatus(Enum):
+    ATTACK_POSSIBLE = "ATTACK_POSSIBLE"
+    ATTACK_NOT_POSSIBLE = "ATTACK_NOT_POSSIBLE"
     ATTACK_MISSED = "ATTACK_MISSED"
     ATTACK_SUCCESS = "ATTACK_SUCCESS"
-    ATTACK_NOT_POSSIBLE = "ATTACK_NOT_POSSIBLE"
 
 
 class DefendStatus(Enum):
+    DEFEND_POSSIBLE = "DEFEND_POSSIBLE"
+    DEFEND_NOT_POSSIBLE = "DEFEND_NOT_POSSIBLE"
     DEFEND_FAILED = "DEFEND_FAILED"
     DEFEND_SUCCESS = "DEFEND_SUCCESS"
-    DEFEND_NOT_POSSIBLE = "DEFEND_NOT_POSSIBLE"
     ATTACK_EVADED = "ATTACK_EVADED"
 
 
-class EquipAt(Enum):
-    HAND_LEFT = "HAND_LEFT"
-    HAND_RIGHT = "HAND_RIGHT"
-    FEET_LEFT = "FEET_LEFT"
-    FEET_RIGHT = "FEET_RIGHT"
-    FINGER1 = "FINGER1"
-    FINGER2 = "FINGER2"
-    WAIST = "WAIST"
-    NECK = "NECK"
-    HEAD = "HEAD"
+class CanModifyPhase:
+    def __init__(self) -> None:
+        pass
+
+    @property
+    def can_start_battle_phase(self) -> bool:
+        return True
+
+    @property
+    def can_end_battle_phase(self) -> bool:
+        return True
+
+    @property
+    def can_start_turn_phase(self) -> bool:
+        return True
+
+    @property
+    def can_end_turn_phase(self) -> bool:
+        return True
+
+    @property
+    def can_start_player_attac_phase(self) -> bool:
+        return True
+
+    @property
+    def can_start_end_attack_phase(self) -> bool:
+        return True
+
+    @property
+    def can_start_opponent_attack_phase(self) -> bool:
+        return True
+
+    @property
+    def can_end_opponent_attack_phase(self) -> bool:
+        return True
+
+    def on_start_battle_phase(self):
+        pass
+
+    def on_end_battle_phase(self):
+        pass
+
+    def on_start_turn_phase(self):
+        pass
+
+    def on_end_turn_phase(self):
+        pass
+
+    def on_start_player_attack_phase(self):
+        pass
+
+    def on_start_end_attack_phase(self):
+        pass
+
+    def on_start_opponent_attack_phase(self):
+        pass
+
+    def on_end_opponent_attack_phase(self):
+        pass
+
+    def switch_to_phase(self, phase: Phase):
+        if Context.current_phase == Phase.BATTLE_START and phase == Phase.TURN_START:
+            Context.current_turn = 1
+        if phase == Phase.TURN_END:
+            Context.current_turn += 1
+        Context.current_phase = phase
+
+
+class CanHaveCustomAction:
+    def __init__(self) -> None:
+        self.actions: dict[str, Tuple[list[Phase], Callable]] = {}
+
+    def get_available_actions(
+        self, phase=Phase.BATTLE_NOT_STARTED, is_player=False
+    ) -> dict[str, Callable]:
+        if not is_player:
+            if "OPPONENT_" in phase.value:
+                phase = Phase[phase.value.replace("OPPONENT_", "PLAYER_")]
+            else:
+                phase = Phase[phase.value.replace("PLAYER_", "OPPONENT_")]
+
+        available_actions: dict[str, Callable] = {}
+        for name, action in self.actions.items():
+            if phase in action[0]:
+                available_actions[name] = action[1]
+
+        return available_actions
+
+    def perform_action(self, action_name: str, **kwargs):
+        if (value := self.actions.get(action_name, None)) is not None:
+            value[1](**kwargs)
+
+    def register_action(
+        self, action_name: str, valid_action_phases: list[Phase], action: Callable
+    ):
+        self.actions[action_name] = (valid_action_phases, action)
 
 
 @define
@@ -81,415 +176,271 @@ class Stat:
             return all([self_dict[k] >= stat_dict[k] for k in self_dict.keys()])
 
 
-class Item:
+class Item(CanModifyPhase, CanHaveCustomAction):
     def __init__(self, **kwargs) -> None:
+        CanModifyPhase.__init__(self)
+        CanHaveCustomAction.__init__(self)
         self.flavor = FlavorStat(**kwargs.get("flavor", {}))
         self.stat = Stat(**kwargs.get("stat", {}))
 
+        self.can_equip: bool = kwargs.get("can_equip", False)
+        self.can_unequip: bool = kwargs.get("can_unequip", False)
+        self.can_consume: bool = kwargs.get("can_consume", False)
+        self.can_attack: bool = kwargs.get("can_attack", False)
+        self.can_defend: bool = kwargs.get("can_defend", False)
+
+        self.stat_on_equip = Stat(**kwargs.get("stat_on_equip", {}))
+        self.stat_to_equip = Stat(
+            **kwargs.get("stat_to_equip", {"strength": float("inf")})
+        )
+        self.can_equip_at: str | None = kwargs.get("can_equip_at", None)
+
+        self.stat_to_consume = Stat(**kwargs.get("stat_to_consume", {}))
+        self.stat_on_consume = Stat(**kwargs.get("stat_on_consume", {}))
+
+    def character_can_equip(self, equip_character: "Character") -> bool:
+        return self.can_equip and equip_character.stat >= self.stat_to_equip
+
+    def character_can_unequip(self, equip_character: "Character") -> bool:
+        return (
+            self.can_unequip
+            and self.flavor.name in equip_character.equipped.group.keys()
+        )
+
+    def character_can_consume(self, consume_character: "Character") -> bool:
+        return self.can_consume and consume_character.stat >= self.stat_to_consume
+
+    def character_can_attack(self, equip_character: "Character") -> bool:
+        return (
+            self.can_attack
+            and self.flavor.name in equip_character.equipped.group.keys()
+        )
+
+    def character_can_defend(self, equip_character: "Character") -> bool:
+        return (
+            self.can_defend
+            and self.flavor.name in equip_character.equipped.group.keys()
+        )
+
+    def character_can_crit(self, equip_character: "Character") -> bool:
+        return False
+
+    def on_equip(self, equip_character: "Character"):
+        if self.character_can_equip(equip_character):
+            equip_character.stat += self.stat_on_equip
+
+    def on_unequip(self, equip_character: "Character"):
+        if self.character_can_unequip(equip_character):
+            equip_character.stat -= self.stat_on_equip
+
+    def on_consume(self, consume_character: "Character"):
+        if self.character_can_consume(consume_character):
+            consume_character.stat += self.stat_on_consume
+
+    def get_attack(self, equip_character: "Character") -> int:
+        if self.character_can_attack(equip_character) and self.stat.attack > 0:
+            if self.character_can_crit(equip_character):
+                return self.stat.attack * 2
+            return self.stat.attack
+        return 0
+
+    def get_defend(self, equip_character: "Character") -> int:
+        if self.character_can_defend(equip_character) and self.stat.defense > 0:
+            return self.stat.defense
+        return 0
+
+    def on_attack(self, equip_character: "Character"):
+        if equip_character.opponent is not None:
+            actual_damage = (
+                self.get_attack(equip_character)
+                + equip_character.stat.attack
+                - equip_character.opponent.defense_by_equipment
+                - equip_character.opponent.stat.defense
+            )
+
+            equip_character.opponent.take_damage(actual_damage)
+
 
 class ItemGroup:
-    def __init__(self, group: dict[str, Any]) -> None:
+    def __init__(self, group: dict[str, Item], limit: int = 99) -> None:
         self.group = group
+        self.limit = limit
 
-    def add(self, item: Any) -> Any | None:
-        if item.flavor.name not in self.group:
+    @property
+    def is_full(self) -> bool:
+        return len(self.group) >= self.limit
+
+    def can_add(self, item: Item) -> bool:
+        return item.flavor.name not in self.group and not self.is_full
+
+    def can_remove(self, item: Item) -> bool:
+        return item.flavor.name in self.group
+
+    def add(self, item: Item) -> Item | None:
+        if self.can_add(item):
             self.group[item.flavor.name] = item
             return item
         return None
 
-    def remove(self, item: Any) -> Any | None:
-        if item.flavor.name in self.group:
+    def remove(self, item: Item) -> Item | None:
+        if self.can_remove(item):
             return self.group.pop(item.flavor.name)
         return None
-
-    def _get_filtered(self, cls_filter) -> dict[str, Any]:
-        return {
-            k: self.group[k]
-            for k in self.group.keys()
-            if isinstance(self.group[k], cls_filter)
-        }
-
-    def get_items_that_can_attack(self) -> dict[str, "CanAttack"]:
-        return self._get_filtered(CanAttack)
-
-    def get_items_that_can_defend(self) -> dict[str, "CanDefend"]:
-        return self._get_filtered(CanDefend)
 
 
 class EquipGroup(ItemGroup):
     def __init__(self) -> None:
-        super().__init__(cast(dict[str, "Item | CanEquip"], {}))
-        self.equip_slots: dict[EquipAt, Item | None] = {k: None for k in EquipAt}
+        super().__init__({}, 11)
 
-    def add(self, item: "Item | CanEquip") -> Item | None:
-        if (_can_equip_at := self.can_equip_at(item)) is not None and (
-            equipped_item := super().add(item)
-        ) is not None:
-            self.equip_slots[_can_equip_at] = equipped_item
-            return equipped_item
+        self.equip_slots: dict[str, Item | None] = {
+            "HEAD": None,
+            "NECK": None,
+            "TORSO": None,
+            "HAND1": None,
+            "HAND2": None,
+            "FINGER1": None,
+            "FINGER2": None,
+            "WAIST": None,
+            "LEG": None,
+            "FOOT1": None,
+            "FOOT2": None,
+        }
+
+    def can_add(self, item: Item) -> bool:
+        return (
+            super().can_add(item)
+            and item.can_equip_at is not None
+            and item.can_equip_at in self.equip_slots
+            and self.equip_slots[item.can_equip_at] is None
+        )
+
+    def can_remove(self, item: Item) -> bool:
+        return (
+            super().can_remove(item)
+            and item.can_equip_at is not None
+            and item.can_equip_at in self.equip_slots
+            and self.equip_slots[item.can_equip_at] == item
+        )
+
+    def add(self, item: Item) -> Item | None:
+        if self.can_add(item) and item.can_equip_at is not None:
+            super().add(item)
+            self.equip_slots[item.can_equip_at] = item
+            return item
         return None
 
-    def remove(self, item: "Item | CanEquip") -> Item | None:
-        if (_equipped_at := self.equipped_at(item)) is not None and (
-            unequipped_item := super().remove(item)
-        ) is not None:
-            self.equip_slots[_equipped_at] = None
-            return unequipped_item
+    def remove(self, item: "Item") -> Item | None:
+        if self.can_remove(item) and item.can_equip_at is not None:
+            super().remove(item)
+            self.equip_slots[item.can_equip_at] = None
+            return item
         return None
 
-    def equipped_at(self, item: "Item | CanEquip") -> EquipAt | None:
+    def equipped_at(self, item: "Item") -> str | None:
         for k, v in self.equip_slots.items():
             if v == item:
                 return k
         return None
 
-    def can_equip_at(self, item: "Item | CanEquip") -> EquipAt | None:
-        if isinstance(item, CanEquip):
-            for equip_at in item.equip_at:
-                if self.equip_slots[equip_at] is None:
-                    return equip_at
-        return None
 
-
-class StatusGroup(ItemGroup):
-    def __init__(self) -> None:
-        super().__init__(cast(dict[str, "Item | IsStatus"], {}))
-
-
-class CanEquip:
+class Character(CanModifyPhase, CanHaveCustomAction):
     def __init__(self, **kwargs) -> None:
-        self.stat_to_equip = Stat(**kwargs.get("stat_to_equip", {}))
-        self.stat_on_equip = Stat(**kwargs.get("stat_on_equip", {}))
-        self.equip_at: list[EquipAt] = kwargs.get("equip_at", [])
+        CanModifyPhase.__init__(self)
+        CanHaveCustomAction.__init__(self)
+        self.is_player = False
 
-    def can_equip(self, player: "Character", opponent: "Character | None") -> bool:
-        return player.stat >= self.stat_to_equip and len(self.equip_at) > 0
-
-    def can_unequip(self, player: "Character", opponent: "Character | None") -> bool:
-        return True
-
-    def on_equip(self, player: "Character", opponent: "Character | None"):
-        player.invoke_status_effect("item_on_equip", item=self)
-        player.stat += self.stat_on_equip
-
-    def on_unequip(self, player: "Character", opponent: "Character | None"):
-        player.invoke_status_effect("item_on_unequip", item=self)
-        player.stat -= self.stat_on_equip
-
-
-class CanConsume:
-    def __init__(self, **kwargs) -> None:
-        self.stat_to_consume = Stat(**kwargs.get("stat_to_consume", {}))
-        self.stat_on_consume = Stat(**kwargs.get("stat_on_consume", {}))
-
-    def can_consume(self, player: "Character", opponent: "Character | None") -> bool:
-        return player.stat >= self.stat_to_consume
-
-    def on_consume(self, player: "Character", opponent: "Character | None"):
-        player.invoke_status_effect("item_on_consume", item=self)
-        player.stat += self.stat_on_consume
-
-
-class CanAttack:
-    def __init__(self, **kwargs) -> None:
-        self.stat_on_attack = Stat(**kwargs.get("stat_on_attack", {}))
-
-    def can_attack(self, player: "Character", opponent: "Character | None") -> bool:
-        return True
-
-    def can_crit(self, player: "Character", opponent: "Character | None") -> bool:
-        return False
-
-    def pre_attack(self, player: "Character", opponent: "Character | None"):
-        player.invoke_status_effect("item_pre_attack", item=self)
-        player.stat += self.stat_on_attack
-        player.stat.attack += (
-            self.stat_on_attack.attack if self.can_crit(player, opponent) else 0
-        )
-
-    def post_attack(
-        self, player: "Character", opponent: "Character | None", damage_done=None
-    ):
-        player.invoke_status_effect("item_post_attack", item=self)
-        player.stat -= self.stat_on_attack
-        player.stat.attack -= (
-            self.stat_on_attack.attack if self.can_crit(player, opponent) else 0
-        )
-
-    def on_attack(self, player: "Character", opponent: "Character | None") -> int:
-        self.pre_attack(player, opponent)
-        damage_done = opponent.defend() if opponent is not None else 0
-        self.post_attack(player, opponent, damage_done=damage_done)
-        return damage_done
-
-
-class CanDefend:
-    def __init__(self, **kwargs) -> None:
-        self.stat_on_defend = Stat(**kwargs.get("stat_on_defend", {}))
-
-    def can_defend(self, player: "Character", opponent: "Character | None"):
-        return True
-
-    def pre_defend(self, player: "Character", opponent: "Character | None"):
-        player.invoke_status_effect("item_pre_defend", item=self)
-        player.stat += self.stat_on_defend
-
-    def post_defend(
-        self, player: "Character", opponent: "Character | None", damage_done=None
-    ):
-        player.invoke_status_effect("item_post_defend", item=self)
-        player.stat -= self.stat_on_defend
-
-
-class IsStatus:
-    def __init__(self, **kwargs) -> None:
-        self.is_active = True
-
-    def can_apply(self, player: "Character", opponent: "Character | None") -> bool:
-        return True
-
-    def can_unapply(self, player: "Character", opponent: "Character | None") -> bool:
-        return True
-
-    def on_apply(self, player: "Character", opponent: "Character | None"):
-        player.invoke_status_effect("item_on_apply", item=self)
-
-    def on_unapply(self, player: "Character", opponent: "Character | None"):
-        player.invoke_status_effect("item_on_unapply", item=self)
-
-    def on(
-        self, player: "Character", opponent: "Character | None", stage: str, **kwargs
-    ):
-        pass
-
-
-class Character:
-    def __init__(self, **kwargs) -> None:
         self.flavor = FlavorStat(**kwargs.get("flavor", {}))
         self.stat = Stat(**kwargs.get("stat", {}))
-
         self.equipped = EquipGroup()
-        self.status_effect = StatusGroup()
 
-        self.opponent: Character | None = None
+        self.__register_actions()
 
-    def calculated_attack(self) -> int:
-        if self.can_crit():
-            return self.stat.attack * 2
-        return self.stat.attack
+    def __register_actions(self):
+        self.register_action(
+            "perform_item_attack",
+            [Phase.PLAYER_ATTACK_START],
+            self.perform_item_attack,
+        )
 
-    def can_attack(self) -> bool:
-        return self.stat.agility >= self._chance()
+    def chance(self):
+        return randint(1, 100 - self.stat.luck)
 
-    def can_crit(self) -> bool:
-        return False
+    @property
+    def defense_by_equipment(self) -> int:
+        defense_by_equipment = 0
+        for item in self.equipped.group.values():
+            if item.character_can_defend(self):
+                defense_by_equipment += item.get_defend(self)
+        return defense_by_equipment
 
-    def can_evade(self) -> bool:
-        return self.stat.agility >= self._chance()
+    @property
+    def opponent(self) -> "Character | None":
+        if self.is_player:
+            return Context.opponent
+        return Context.player
 
-    def can_defend(self) -> bool:
-        return True
+    def get_available_actions(self, phase=None, is_player=None) -> dict[str, Callable]:
+        phase = Context.current_phase if phase is None else phase
+        is_player = self.is_player if is_player is None else is_player
+
+        return super().get_available_actions(phase, self.is_player)
 
     def can_equip(self, item: "Item") -> bool:
-        return (
-            isinstance(item, Item)
-            and isinstance(item, CanEquip)
-            and item.can_equip(player=self, opponent=self.opponent)
-        )
+        return item.character_can_equip(self) and self.equipped.can_add(item)
 
     def can_unequip(self, item: "Item") -> bool:
-        return (
-            isinstance(item, Item)
-            and isinstance(item, CanEquip)
-            and item.can_unequip(player=self, opponent=self.opponent)
-        )
+        return item.character_can_unequip(self) and self.equipped.can_remove(item)
 
     def can_consume(self, item: "Item") -> bool:
-        return (
-            isinstance(item, Item)
-            and isinstance(item, CanConsume)
-            and item.can_consume(player=self, opponent=self.opponent)
-        )
+        return item.character_can_consume(self)
 
-    def can_apply(self, item: "Item") -> bool:
-        return (
-            isinstance(item, Item)
-            and isinstance(item, IsStatus)
-            and item.can_apply(player=self, opponent=self.opponent)
-        )
-
-    def can_unapply(self, item: "Item") -> bool:
-        return (
-            isinstance(item, Item)
-            and isinstance(item, IsStatus)
-            and item.can_unapply(player=self, opponent=self.opponent)
-        )
-
-    def initiate_battle(self, opponent: "Character"):
-        self.opponent = opponent
-
-    def attack(self) -> int:
-        attack_status = self._attack_status()
-        self.invoke_status_effect("character_pre_attack", attack_status=attack_status)
-        if attack_status is AttackStatus.ATTACK_SUCCESS:
-            damage_done = 0
-            for item in self.equipped.get_items_that_can_attack().values():
-                if item.can_attack(player=self, opponent=self.opponent):
-                    damage_done += item.on_attack(player=self, opponent=self.opponent)
-            self.invoke_status_effect(
-                "character_post_attack",
-                attack_status=attack_status,
-                damage_done=damage_done,
-            )
-            return damage_done
-        self.invoke_status_effect(
-            "character_post_attack", attack_status=attack_status, damage_done=0
-        )
-        return 0
-
-    def defend(self) -> int:
-        defend_status = self._defend_status()
-        opponent_attack = (
-            self.opponent.calculated_attack()
-            if isinstance(self.opponent, Character)
-            else 0
-        )
-        self.invoke_status_effect(
-            "character_pre_defend",
-            attack_status=defend_status,
-            opponent_attack=opponent_attack,
-        )
-        if defend_status is DefendStatus.DEFEND_SUCCESS:
-            defendable_items = [
-                item
-                for item in self.equipped.get_items_that_can_defend().values()
-                if item.can_defend(player=self, opponent=self.opponent)
-            ]
-
-            for item in defendable_items:
-                item.pre_defend(player=self, opponent=self.opponent)
-
-            opponent_attack -= self.stat.defense if len(defendable_items) > 0 else 0
-
-            self._take_damage(opponent_attack)
-
-            for item in defendable_items:
-                item.post_defend(player=self, opponent=self.opponent)
-            self.invoke_status_effect(
-                "character_post_defend",
-                attack_status=defend_status,
-                opponent_attack=opponent_attack,
-            )
-            return opponent_attack
-        elif defend_status in [
-            DefendStatus.DEFEND_NOT_POSSIBLE,
-            DefendStatus.DEFEND_FAILED,
-        ]:
-            self._take_damage(opponent_attack)
-            self.invoke_status_effect(
-                "character_post_defend",
-                attack_status=defend_status,
-                opponent_attack=opponent_attack,
-            )
-            return opponent_attack
-        self.invoke_status_effect(
-            "character_post_defend",
-            attack_status=defend_status,
-            opponent_attack=opponent_attack,
-        )
-        return 0
+    def consume(self, item: "Item") -> Item | None:
+        if self.can_consume(item):
+            item.on_consume(self)
+            return item
+        return None
 
     def equip(self, item: "Item") -> Item | None:
-        if (
-            self.can_equip(item)
-            and self.equipped.add(item) is not None
-            and isinstance(item, CanEquip)
-        ):
-            item.on_equip(player=self, opponent=self.opponent)
-            return item
+        if self.can_equip(item):
+            item.on_equip(self)
+            return self.equipped.add(item)
         return None
 
     def unequip(self, item: "Item") -> Item | None:
-        if (
-            self.can_unequip(item)
-            and self.equipped.remove(item) is not None
-            and isinstance(item, CanEquip)
-        ):
-            item.on_unequip(player=self, opponent=self.opponent)
-            return item
+        if self.can_unequip(item):
+            item.on_unequip(self)
+            return self.equipped.remove(item)
         return None
 
-    def consume(self, item: "Item") -> Item | None:
-        if self.can_consume(item) and isinstance(item, CanConsume):
-            item.on_consume(player=self, opponent=self.opponent)
-            return item
-        return None
+    def perform_item_attack(self, **kwargs):
+        if self.stat.agility > self.chance():
+            for item in self.equipped.group.values():
+                if item.character_can_attack(self):
+                    item.on_attack(self)
 
-    def apply(self, item: "Item") -> Item | None:
-        if (
-            self.can_apply(item)
-            and self.status_effect.add(item) is not None
-            and isinstance(item, IsStatus)
-        ):
-            item.on_apply(player=self, opponent=self.opponent)
-            return item
-        return None
+    def heal(self, heal: int):
+        if heal > 0:
+            self.stat.health += heal
 
-    def unapply(self, item: "Item") -> Item | None:
-        if (
-            self.can_unapply(item)
-            and self.status_effect.remove(item) is not None
-            and isinstance(item, IsStatus)
-        ):
-            item.on_unapply(player=self, opponent=self.opponent)
-            return item
-        return None
-
-    def invoke_status_effect(self, stage: str, **kwargs) -> Any:
-        for status_effect in self.status_effect.group.values():
-            if isinstance(status_effect, IsStatus):
-                status_effect.on(self, self.opponent, stage, **kwargs)
-
-    def _chance(self):
-        _max = 100 - self.stat.luck if self.stat.luck < 99 else 99
-        return random.randint(0, _max)
-
-    def _attack_status(self) -> AttackStatus:
-        if self.can_attack():
-            if any(
-                [
-                    item.can_attack(self, self.opponent)
-                    for item in self.equipped.get_items_that_can_attack().values()
-                ]
-            ):
-                return AttackStatus.ATTACK_SUCCESS
-            return AttackStatus.ATTACK_NOT_POSSIBLE
-        return AttackStatus.ATTACK_MISSED
-
-    def _defend_status(self) -> DefendStatus:
-        if not self.can_evade():
-            if self.can_defend():
-                if any(
-                    [
-                        item.can_defend(self, self.opponent)
-                        for item in self.equipped.get_items_that_can_defend().values()
-                    ]
-                ):
-                    return DefendStatus.DEFEND_SUCCESS
-                return DefendStatus.DEFEND_NOT_POSSIBLE
-            return DefendStatus.DEFEND_FAILED
-        return DefendStatus.ATTACK_EVADED
-
-    def _take_damage(self, damage: int):
+    def take_damage(self, damage: int):
         if damage > 0:
             self.stat.health -= damage
 
 
 class Battle:
     def __init__(self, player: Character, opponent: Character) -> None:
-        self.player = player
-        self.opponent = opponent
+        self.initiate(player, opponent)
 
-    def initiate(self):
-        self.player.initiate_battle(self.opponent)
-        self.opponent.initiate_battle(self.player)
+    def initiate(self, player: Character, opponent: Character):
+        Context.player = player
+        Context.opponent = opponent
+
+        Context.player.is_player = True
+        Context.opponent.is_player = False
+
+
+class Context:
+    current_turn: int = 0
+    player: "Character | None" = None
+    opponent: "Character | None" = None
+    current_phase: Phase = Phase.BATTLE_NOT_STARTED
