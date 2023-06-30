@@ -1,8 +1,7 @@
-from app.base import Character, EquipAt, Item, CanEquip, CanAttack
-from app.status.afflictions import Burning, Freeze
+from app.base import Character, Item
 
 
-class RustedSword(Item, CanEquip, CanAttack):
+class RustedSword(Item):
     def __init__(self) -> None:
         Item.__init__(
             self,
@@ -10,17 +9,14 @@ class RustedSword(Item, CanEquip, CanAttack):
                 "name": "RustedSword",
                 "description": "A worn-out and rusty sword with limited lifespan",
             },
-            stat={"health": 5},
+            stat={"health": 5, "attack": 8},
+            stat_to_equip={"strength": 5},
+            can_equip=True,
+            can_attack=True,
         )
-        CanEquip.__init__(
-            self,
-            stat_to_equip={"strength": 13},
-            equip_at=[EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
-        )
-        CanAttack.__init__(self, stat_on_attack={"attack": 8})
 
 
-class IronSword(Item, CanEquip, CanAttack):
+class IronSword(Item):
     def __init__(self) -> None:
         Item.__init__(
             self,
@@ -28,17 +24,14 @@ class IronSword(Item, CanEquip, CanAttack):
                 "name": "IronSword",
                 "description": "A sturdy and reliable iron sword",
             },
-            stat={"health": 25},
-        )
-        CanEquip.__init__(
-            self,
+            stat={"health": 20, "attack": 12},
             stat_to_equip={"strength": 15},
-            equip_at=[EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
+            can_equip=True,
+            can_attack=True,
         )
-        CanAttack.__init__(self, stat_on_attack={"attack": 12})
 
 
-class SilverSword(Item, CanEquip, CanAttack):
+class SilverSword(Item):
     def __init__(self) -> None:
         Item.__init__(
             self,
@@ -46,17 +39,15 @@ class SilverSword(Item, CanEquip, CanAttack):
                 "name": "SilverSword",
                 "description": "A finely crafted silver sword with a gleaming blade",
             },
-            stat={"health": 25},
-        )
-        CanEquip.__init__(
-            self,
+            stat={"health": 20, "attack": 18},
             stat_to_equip={"strength": 18},
-            equip_at=[EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
+            can_equip=True,
+            can_attack=True,
         )
-        CanAttack.__init__(self, stat_on_attack={"attack": 18})
 
 
-class FlameSword(Item, CanEquip, CanAttack):
+class FlameSword(Item):
+    # NOTE: chance for BURNING
     def __init__(self) -> None:
         Item.__init__(
             self,
@@ -64,30 +55,23 @@ class FlameSword(Item, CanEquip, CanAttack):
                 "name": "FlameSword",
                 "description": "A sword infused with the power of fire, emanating flames from its blade.",
             },
-            stat={"health": 15},
-        )
-        CanEquip.__init__(
-            self,
+            stat={"health": 15, "attack": 18},
             stat_to_equip={"strength": 15, "intelligence": 10},
-            equip_at=[EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
+            can_equip=True,
+            can_attack=True,
         )
-        CanAttack.__init__(self, stat_on_attack={"attack": 18})
 
-    def can_crit(self, player: Character, opponent: Character | None) -> bool:
-        if opponent is not None and "UNDEAD" in [
-            opponent.flavor.category,
-            opponent.flavor.sub_category,
+    def character_can_crit(self, equip_character: Character) -> bool:
+        if equip_character.opponent is not None and "UNDEAD" in [
+            equip_character.opponent.flavor.category,
+            equip_character.opponent.flavor.sub_category,
         ]:
             return True
-        return super().can_crit(player, opponent)
-
-    def on_attack(self, player: Character, opponent: Character | None) -> int:
-        if player._chance() > 75 and opponent is not None:
-            opponent.apply(Burning())
-        return super().on_attack(player, opponent)
+        return False
 
 
-class FrostSword(Item, CanEquip, CanAttack):
+class FrostSword(Item):
+    # NOTE: chance for FREEZE
     # NOTE: Should implement a method to shoot ice bolts
     def __init__(self) -> None:
         Item.__init__(
@@ -96,15 +80,8 @@ class FrostSword(Item, CanEquip, CanAttack):
                 "name": "FrostSword",
                 "description": " A sword imbued with the chilling cold of ice, freezing enemies on impact.",
             },
-        )
-        CanEquip.__init__(
-            self,
+            stat={"health": 15, "attack": 14},
             stat_to_equip={"strength": 12, "intelligence": 8},
-            equip_at=[EquipAt.HAND_LEFT, EquipAt.HAND_RIGHT],
+            can_equip=True,
+            can_attack=True,
         )
-        CanAttack.__init__(self, stat_on_attack={"attack": 14})
-
-    def on_attack(self, player: Character, opponent: Character | None) -> int:
-        if player._chance() > 75 and opponent is not None:
-            opponent.apply(Freeze())
-        return super().on_attack(player, opponent)
